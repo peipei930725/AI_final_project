@@ -38,15 +38,16 @@ def load_all_data_from_dir(directory):
 
 # === 步驟 2: 資料預處理 ===
 def preprocess(text):
-    """對文字進行預處理：分詞並移除停用詞。"""
+    """對文字進行預處理：分詞並移除停用詞和介系詞。"""
     stopwords_path = os.path.join("extra_dict", "stopwords.txt")  # 停用詞檔案路徑
     stopwords = set(load_text(stopwords_path))  # 載入停用詞並轉換為集合
     if PADDLE_MODE:
         tokens = jieba.cut(text, use_paddle=True)  # 使用 Paddle 模式分詞
     else:
         tokens = jieba.cut(text)  # 使用預設模式分詞
-    # 過濾停用詞並返回分詞結果
+    # 過濾停用詞、介系詞，並去除空字串或空白分詞
     return [token for token in tokens if token.strip() and token not in stopwords]
+
 
 # === 步驟 3: 倒排索引構建 ===
 def build_inverted_index(data):
@@ -73,10 +74,11 @@ def search(query, index, documents):
 
     for token in query_tokens:  # 遍歷查詢中的每個詞語
         if token in index:  # 如果詞語存在於倒排索引中
-            idf = log(len(documents) / len(index[token]))  # 計算逆文件頻率（IDF）
+            idf = log(len(documents) / len(index[token]) + 1)  # 計算逆文件頻率（IDF），加 1 防止分母為 0
             for full_doc_id in index[token]:  # 遍歷包含該詞語的所有文件
-                # 計算詞頻（TF）：詞語在文章中的出現次數除以文章的總詞數
+                # 提取文檔內容
                 doc_content = next(doc[1] for doc in documents if doc[0] == full_doc_id)
+                # 計算詞頻（TF）：詞語在文章中的出現次數除以文章的總詞數
                 token_count = doc_content.count(token)  # 詞語出現的次數
                 total_tokens = len(preprocess(doc_content))  # 文檔的總詞數
                 tf = token_count / total_tokens  # 詞頻
@@ -85,6 +87,7 @@ def search(query, index, documents):
     # 按文件得分降序排序
     sorted_results = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
     return [(full_doc_id, doc_scores[full_doc_id]) for full_doc_id, _ in sorted_results]
+
 
 
 # === 步驟 5: 顯示搜尋結果 ===
